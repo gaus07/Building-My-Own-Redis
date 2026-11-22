@@ -1,41 +1,53 @@
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 
 public class Main {
-  public static void main(String[] args){
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    System.out.println("Logs from your program will appear here!");
+    private static final byte[] PONG_RESPONSE = "+PONG\r\n".getBytes(StandardCharsets.UTF_8);
 
-    //  Uncomment the code below to pass the first stage
-        ServerSocket serverSocket = null;
-        Socket clientSocket = null;
+    public static void main(String[] args) {
         int port = 6379;
-        try {
-          serverSocket = new ServerSocket(port);
-          // Since the tester restarts your program quite often, setting SO_REUSEADDR
-          // ensures that we don't run into 'Address already in use' errors
-          serverSocket.setReuseAddress(true);
-          // Wait for connection from client.
-          clientSocket = serverSocket.accept();
-//          clientSocket.getOutputStream().write("+PONG\r\n".getBytes());
-            InputStream inputStream = clientSocket.getInputStream();
-            byte[] buffer = new byte[1024];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buffer)) != -1) {
-                clientSocket.getOutputStream().write("+PONG\r\n".getBytes());
+
+        try (ServerSocket serverSocket = new ServerSocket()) {
+            serverSocket.setReuseAddress(true);
+            serverSocket.bind(new InetSocketAddress(port));
+
+            System.out.println("Redis server started on port " + port);
+
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("New Client Connected!");
+
+                // Handling each client in a separate thread
+                Thread clientThread = new Thread(() -> handleClient(clientSocket));
+
+                clientThread.start();
             }
         } catch (IOException e) {
-          System.out.println("IOException: " + e.getMessage());
-        } finally {
-          try {
-            if (clientSocket != null) {
-              clientSocket.close();
-            }
-          } catch (IOException e) {
-            System.out.println("IOException: " + e.getMessage());
-          }
+            System.out.println("Server IOException: " + e.getMessage());
         }
-  }
+    }
+
+    private static void handleClient(Socket clientSocket) {
+        try (
+                Socket socket = clientSocket;
+                InputStream inputStream = socket.getInputStream();
+                OutputStream outputStream = socket.getOutputStream();
+        ) {
+
+            byte[] buffer = new byte[1024];
+            int byteRead;
+
+            while ((byteRead = inputStream.read(buffer)) != -1) {
+                outputStream.write(PONG_RESPONSE);
+                outputStream.flush();
+            }
+        } catch (IOException e) {
+            System.out.println("Client Connection Closed: " + e.getMessage());
+        }
+    }
 }
